@@ -1,101 +1,83 @@
-# MultiTierPSI
+# multitier-psi
 
-Private Set Intersection on supplier graphs. Two brands run a
-cryptographic intersection of their tier-2 and tier-3 supplier
-dependencies and learn only "do we share single-point-of-failure
-suppliers, and how many," without revealing supplier lists.
+private set intersection over public supplier graph fixtures.
 
-## What this is
+this repo is a reference protocol package. it shows how two parties can map
+party-local supplier names to agreed canonical ids, traverse tier-2 and tier-3
+supplier dependencies, and run a two-party intersection over the resulting
+single-source supplier sets.
 
-Post-COVID and post-Ukraine, shared-SPOF discovery is a board-level
-question at every concentrated supply chain (auto OEMs, smartphone
-OEMs, defense primes, pharma). Brands cannot share supplier lists
-(competitive risk, legal risk) but desperately want the answer. PSI
-primitives are now production-ready (Google, Signal already deploy
-them at scale).
+the package is useful as a local testbed. it is not audited production crypto.
 
-MultiTierPSI fuses the PSI primitive with a supplier-graph schema
-borrowed from chip-supply-chain-map. The generic PSI library is
-commodity; the procurement-relevant schema, the tier-N traversal
-rules, and the worked Tier-2 datasets are not.
+## current behavior
 
-The first artifact is an open-source PSI runtime plus a
-supplier-graph schema plus a worked example: OEM A and OEM B
-discover that they share a single Taiwanese substrate vendor as a
-tier-2 dependency, without revealing the size of either supplier
-list.
+- `mtpsi` python package with `__version__`.
+- `python -m mtpsi validate` runs with no arguments.
+- supplier graph and psi session schemas.
+- canonical supplier dictionary and two public fixture graphs.
+- baseline plaintext mode for deterministic tests.
+- dh_based reference mode with a padded mock secure-channel transcript.
+- local gates for schemas, determinism, leakage boundary, voice, and tests.
 
-Buyers: chief procurement officers and supply-chain risk leads at
-competing brands in concentrated supply chains. Defense-industrial
-buyers in particular.
+the committed fixtures return intersection size 1 in both modes.
 
-## Status
-
-v0 scaffold. No implementation. The repo holds the README, the
-license, the agents contract, the foundation spec, and the literal
-first PR plan. The first runnable PR after this scaffold lands the
-supplier-graph schema and a deterministic baseline-intersection (not
-yet cryptographic) the PSI implementation can be tested against.
-
-## How to run
-
-Placeholder. After implementation lands:
+## run
 
 ```bash
-uv run mtpsi serve --party A --graph data/oem_a_graph.json --port 7777
-uv run mtpsi connect --party B --graph data/oem_b_graph.json --peer localhost:7777
-# Both sides print: "Shared tier-2 SPOFs: 3"
+python -m mtpsi validate
+python -m mtpsi run --mode baseline --seed fixture-v0
+python -m mtpsi run --mode dh_based --seed fixture-v0
 ```
 
-## Layout
+local gates:
 
-```
-multitier-psi/
-  README.md
-  LICENSE
-  AGENTS.md
-  .gitignore
-  specs/
-    0001-foundation/
-      requirements.md          # R-PSI-NNN
-      design.md
-      tasks.md
-      acceptance.md
-  docs/
-    first-pr.md
+```bash
+uv run pytest
+python scripts/voice_lint.py
+python scripts/validate_schemas.py
+python eval/determinism.py
+python eval/leakage_bound.py
 ```
 
-Downstream additions:
+## layout
 
+```text
+src/mtpsi/
+  cli.py
+  party.py
+  protocol.py
+schemas/
+  supplier_graph.schema.json
+  psi_session.schema.json
+data/
+  canonical_supplier_dict.json
+  oem_a_graph.json
+  oem_b_graph.json
+examples/
+  psi-session-baseline.jsonl
+eval/
+  determinism.py
+  leakage_bound.py
+scripts/
+  validate_schemas.py
+  voice_lint.py
+tests/
+  test_protocol.py
 ```
-  src/mtpsi/
-    graph/loader.py
-    graph/canonicalize.py        # produces stable supplier ids both parties agree on
-    graph/traverse.py            # tier-N traversal
-    psi/baseline.py              # plaintext baseline for testing
-    psi/dh_based.py              # ECDH-based PSI per ScienceDirect Jan 2026
-    psi/protocol.py              # protocol message types
-    transport/sockets.py
-    cli.py
-  schemas/
-    supplier_graph.schema.json
-    psi_session.schema.json
-    intersection_result.schema.json
-  data/
-    oem_a_graph.json             # worked-example fixtures
-    oem_b_graph.json
-    canonical_supplier_dict.json
-  eval/
-    leakage_bound.py             # asserts protocol leaks only intersection size
-    determinism.py
-```
 
-## Security note
+## security note
 
-The PSI primitive is a research-grade reference implementation in
-v0. It is not a substitute for an audited cryptographic deployment.
-The leakage-bound proof lands in spec 0002.
+baseline sends plaintext sets. use it as a test oracle only.
 
-## License
+dh_based is a reference mode. it uses a commutative blinding flow and a padded
+mock secure-channel transcript for fixtures. replace it with an audited
+two-party psi library before live use.
 
-MIT. See [LICENSE](LICENSE).
+## docs
+
+- `PRODUCT_BRIEF.md`
+- `SYSTEM_MAP.md`
+- `STATUS.md`
+- `decisions/DEC-PSI-001-protocol-choice.md`
+- `docs/security-disclosure.md`
+- `docs/dev/protocol-walkthrough.md`

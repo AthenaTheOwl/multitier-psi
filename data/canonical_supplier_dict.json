@@ -1,0 +1,52 @@
+{
+  "version": "2026-06-22.fixture",
+  "entries": [
+    {
+      "canonical_id": "sup.tw.phoenix-substrates",
+      "display_name": "phoenix substrates taiwan",
+      "jurisdiction": "tw",
+      "aliases": [
+        "phoenix substrates",
+        "phoenix substrates tw",
+        "phoenix substrate ltd",
+        "ps tw"
+      ]
+    },
+    {
+      "canonical_id": "sup.jp.lens-grind",
+      "display_name": "lens grind japan",
+      "jurisdiction": "jp",
+      "aliases": [
+        "lens grind jp",
+        "lens grind japan"
+      ]
+    },
+    {
+      "canonical_id": "sup.us.die-adhesive",
+      "display_name": "die adhesive usa",
+      "jurisdiction": "us",
+      "aliases": [
+        "die adhesive us",
+        "die adhesive usa"
+      ]
+    },
+    {
+      "canonical_id": "sup.my.power-ic",
+      "display_name": "power ic malaysia",
+      "jurisdiction": "my",
+      "aliases": [
+        "power ic my",
+        "power ic malaysia"
+      ]
+    },
+    {
+      "canonical_id": "sup.kr.substrate-alt",
+      "display_name": "substrate alternate korea",
+      "jurisdiction": "kr",
+      "aliases": [
+        "substrate alt kr",
+        "substrate alternate korea"
+      ]
+    }
+  ]
+}

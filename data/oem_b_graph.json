@@ -1,0 +1,81 @@
+{
+  "schema_version": "1.0",
+  "party_id": "oem_b",
+  "dictionary_version": "2026-06-22.fixture",
+  "nodes": [
+    {
+      "node_id": "brand.oem_b",
+      "type": "brand",
+      "display_name": "oem b",
+      "party_local_id": "oem_b"
+    },
+    {
+      "node_id": "component.rf_module",
+      "type": "component",
+      "display_name": "rf module",
+      "party_local_id": "b.rf_module"
+    },
+    {
+      "node_id": "component.power_board",
+      "type": "component",
+      "display_name": "power board",
+      "party_local_id": "b.power_board"
+    },
+    {
+      "node_id": "supplier.beta_module_house",
+      "type": "tier1_supplier",
+      "display_name": "beta module house",
+      "party_local_id": "b.beta_module_house"
+    },
+    {
+      "node_id": "supplier.power_board_house",
+      "type": "tier1_supplier",
+      "display_name": "power board house",
+      "party_local_id": "b.power_board_house"
+    },
+    {
+      "node_id": "supplier.phoenix_substrate_ltd",
+      "type": "tier2_supplier",
+      "display_name": "phoenix substrate ltd",
+      "party_local_id": "b.phoenix_substrate_ltd"
+    },
+    {
+      "node_id": "supplier.power_ic_my",
+      "type": "tier2_supplier",
+      "display_name": "power ic my",
+      "party_local_id": "b.power_ic_my"
+    }
+  ],
+  "edges": [
+    {
+      "from": "brand.oem_b",
+      "to": "component.rf_module",
+      "type": "depends_on"
+    },
+    {
+      "from": "brand.oem_b",
+      "to": "component.power_board",
+      "type": "depends_on"
+    },
+    {
+      "from": "component.rf_module",
+      "to": "supplier.beta_module_house",
+      "type": "sources_from"
+    },
+    {
+      "from": "supplier.beta_module_house",
+      "to": "supplier.phoenix_substrate_ltd",
+      "type": "depends_on"
+    },
+    {
+      "from": "component.power_board",
+      "to": "supplier.power_board_house",
+      "type": "sources_from"
+    },
+    {
+      "from": "supplier.power_board_house",
+      "to": "supplier.power_ic_my",
+      "type": "depends_on"
+    }
+  ]
+}
