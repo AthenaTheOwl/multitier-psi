@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/mtpsi/psi_session.schema.json",
+  "title": "psi session",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "session_id",
+    "protocol_version",
+    "parties",
+    "started_at",
+    "finished_at",
+    "intersection_size",
+    "transcript_hash"
+  ],
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "minLength": 8
+    },
+    "protocol_version": {
+      "const": "0.1"
+    },
+    "parties": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["party_id"],
+        "properties": {
+          "party_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "started_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "finished_at": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intersection_size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "transcript_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  }
+}

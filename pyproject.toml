@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mtpsi"
+version = "0.1.0"
+description = "reference private set intersection runtime for supplier graph fixtures"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "mtpsi contributors" }]
+dependencies = []
+
+[project.scripts]
+mtpsi = "mtpsi.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mtpsi"]
+
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = [
+  "jsonschema>=4.0",
+  "pytest>=8.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

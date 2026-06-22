@@ -1,0 +1,125 @@
+{
+  "schema_version": "1.0",
+  "party_id": "oem_a",
+  "dictionary_version": "2026-06-22.fixture",
+  "nodes": [
+    {
+      "node_id": "brand.oem_a",
+      "type": "brand",
+      "display_name": "oem a",
+      "party_local_id": "oem_a"
+    },
+    {
+      "node_id": "component.processor_package",
+      "type": "component",
+      "display_name": "processor package",
+      "party_local_id": "a.processor_package"
+    },
+    {
+      "node_id": "component.camera_module",
+      "type": "component",
+      "display_name": "camera module",
+      "party_local_id": "a.camera_module"
+    },
+    {
+      "node_id": "component.sensor_board",
+      "type": "component",
+      "display_name": "sensor board",
+      "party_local_id": "a.sensor_board"
+    },
+    {
+      "node_id": "supplier.alpha_assembly",
+      "type": "tier1_supplier",
+      "display_name": "alpha assembly",
+      "party_local_id": "a.alpha_assembly"
+    },
+    {
+      "node_id": "supplier.camera_house",
+      "type": "tier1_supplier",
+      "display_name": "camera house",
+      "party_local_id": "a.camera_house"
+    },
+    {
+      "node_id": "supplier.sensor_pack",
+      "type": "tier1_supplier",
+      "display_name": "sensor pack",
+      "party_local_id": "a.sensor_pack"
+    },
+    {
+      "node_id": "supplier.phoenix_substrates",
+      "type": "tier2_supplier",
+      "display_name": "phoenix substrates",
+      "party_local_id": "a.phoenix_substrates"
+    },
+    {
+      "node_id": "supplier.lens_grind_jp",
+      "type": "tier2_supplier",
+      "display_name": "lens grind jp",
+      "party_local_id": "a.lens_grind_jp"
+    },
+    {
+      "node_id": "supplier.substrate_alt_kr",
+      "type": "tier2_supplier",
+      "display_name": "substrate alt kr",
+      "party_local_id": "a.substrate_alt_kr"
+    },
+    {
+      "node_id": "supplier.die_adhesive_us",
+      "type": "tier3_supplier",
+      "display_name": "die adhesive us",
+      "party_local_id": "a.die_adhesive_us"
+    }
+  ],
+  "edges": [
+    {
+      "from": "brand.oem_a",
+      "to": "component.processor_package",
+      "type": "depends_on"
+    },
+    {
+      "from": "brand.oem_a",
+      "to": "component.camera_module",
+      "type": "depends_on"
+    },
+    {
+      "from": "brand.oem_a",
+      "to": "component.sensor_board",
+      "type": "depends_on"
+    },
+    {
+      "from": "component.processor_package",
+      "to": "supplier.alpha_assembly",
+      "type": "sources_from"
+    },
+    {
+      "from": "supplier.alpha_assembly",
+      "to": "supplier.phoenix_substrates",
+      "type": "depends_on"
+    },
+    {
+      "from": "supplier.phoenix_substrates",
+      "to": "supplier.die_adhesive_us",
+      "type": "depends_on"
+    },
+    {
+      "from": "component.camera_module",
+      "to": "supplier.camera_house",
+      "type": "sources_from"
+    },
+    {
+      "from": "supplier.camera_house",
+      "to": "supplier.lens_grind_jp",
+      "type": "depends_on"
+    },
+    {
+      "from": "component.sensor_board",
+      "to": "supplier.sensor_pack",
+      "type": "sources_from"
+    },
+    {
+      "from": "supplier.sensor_pack",
+      "to": "supplier.substrate_alt_kr",
+      "type": "depends_on"
+    }
+  ]
+}
