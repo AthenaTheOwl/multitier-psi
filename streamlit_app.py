@@ -1,12 +1,15 @@
-"""multitier-psi shared single-source exposure browser.
+"""multitier-psi shared single-source exposure browser + live psi runner.
 
 reads the committed supplier-graph fixtures and the example psi session record
-directly from disk (paths relative to this file). no network, no secrets.
+directly from disk, then lets the user edit a party's supplier graph and re-run
+the REAL psi pipeline (mtpsi.party + mtpsi.protocol) on that input. no network,
+no secrets.
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import streamlit as st
@@ -17,6 +20,27 @@ DICTIONARY = DATA / "canonical_supplier_dict.json"
 GRAPH_A = DATA / "oem_a_graph.json"
 GRAPH_B = DATA / "oem_b_graph.json"
 SESSION = ROOT / "examples" / "psi-session-baseline.jsonl"
+
+# make the real package importable whether installed (wheel from src/) or run
+# straight from the repo checkout on streamlit cloud.
+for candidate in (ROOT, ROOT / "src"):
+    p = str(candidate)
+    if candidate.exists() and p not in sys.path:
+        sys.path.insert(0, p)
+
+# the real engine. these are the exact functions the cli `run`/`show` verbs drive.
+from mtpsi.party import (  # noqa: E402
+    GraphValidationError,
+    Party,
+    canonicalize_graph,
+    load_canonical_dictionary,
+    validate_supplier_graph,
+)
+from mtpsi.protocol import (  # noqa: E402
+    assert_leakage_boundary,
+    enumerate_tier_spofs,
+    run_dh_based,
+)
 
 
 def _load_json(path: Path):
@@ -35,81 +59,6 @@ def _canonical_meta(dictionary: dict) -> dict[str, dict[str, str]]:
     return meta
 
 
-SUPPLIER_TYPES = {"tier1_supplier", "tier2_supplier", "tier3_supplier"}
-
-
-def _norm(value: str) -> str:
-    return " ".join(value.casefold().replace("_", " ").replace("-", " ").split())
-
-
-def _aliases(dictionary: dict) -> dict[str, str]:
-    aliases: dict[str, str] = {}
-    for entry in dictionary.get("entries", []):
-        cid = entry.get("canonical_id")
-        if not isinstance(cid, str):
-            continue
-        aliases[_norm(entry.get("display_name", ""))] = cid
-        for alias in entry.get("aliases", []):
-            if isinstance(alias, str) and alias.strip():
-                aliases[_norm(alias)] = cid
-    return aliases
-
-
-def _canonical_spof_ids(graph: dict, aliases: dict[str, str]) -> set[str]:
-    """tier-2/3 suppliers that are the single source for a component.
-
-    mirrors mtpsi.protocol.enumerate_tier_spofs over the committed fixtures.
-    """
-
-    from collections import defaultdict
-
-    node_by_id = {n["node_id"]: n for n in graph["nodes"]}
-
-    def canonical_of(node: dict) -> str | None:
-        if node.get("canonical_id"):
-            return node["canonical_id"]
-        for candidate in (node.get("display_name", ""), node.get("party_local_id", "")):
-            cid = aliases.get(_norm(candidate))
-            if cid:
-                return cid
-        return None
-
-    def tier(node_type: str) -> int | None:
-        return {"tier1_supplier": 1, "tier2_supplier": 2, "tier3_supplier": 3}.get(node_type)
-
-    outgoing: dict[str, list[str]] = defaultdict(list)
-    for edge in graph["edges"]:
-        outgoing[edge["from"]].append(edge["to"])
-
-    component_ids = [n["node_id"] for n in graph["nodes"] if n["type"] == "component"]
-    spofs: set[str] = set()
-    for component_id in component_ids:
-        seen: set[tuple[str, int]] = set()
-        tier_to_ids: dict[int, set[str]] = defaultdict(set)
-        stack: list[tuple[str, int]] = [(component_id, 0)]
-        while stack:
-            node_id, depth = stack.pop()
-            if (node_id, depth) in seen:
-                continue
-            seen.add((node_id, depth))
-            node = node_by_id[node_id]
-            t = tier(node["type"])
-            if t in (2, 3):
-                cid = canonical_of(node)
-                if cid:
-                    tier_to_ids[t].add(cid)
-            if depth >= 4:
-                continue
-            for target_id in outgoing.get(node_id, []):
-                if node_by_id[target_id]["type"] in SUPPLIER_TYPES:
-                    stack.append((target_id, depth + 1))
-        for t in (2, 3):
-            ids = tier_to_ids.get(t, set())
-            if len(ids) == 1:
-                spofs.update(ids)
-    return spofs
-
-
 st.set_page_config(page_title="multitier-psi", layout="centered")
 st.title("multitier-psi")
 st.caption(
@@ -124,17 +73,9 @@ if missing:
 
 dictionary = _load_json(DICTIONARY)
 meta = _canonical_meta(dictionary)
-aliases = _aliases(dictionary)
-graph_a = _load_json(GRAPH_A)
-graph_b = _load_json(GRAPH_B)
-
-party_a = graph_a["party_id"]
-party_b = graph_b["party_id"]
-a_ids = _canonical_spof_ids(graph_a, aliases)
-b_ids = _canonical_spof_ids(graph_b, aliases)
-shared = sorted(a_ids & b_ids)
-a_only = sorted(a_ids - b_ids)
-b_only = sorted(b_ids - a_ids)
+aliases = load_canonical_dictionary(DICTIONARY)
+graph_a_raw = _load_json(GRAPH_A)
+graph_b_raw = _load_json(GRAPH_B)
 
 
 def name_of(cid: str) -> str:
@@ -144,6 +85,23 @@ def name_of(cid: str) -> str:
 def juris_of(cid: str) -> str:
     return meta.get(cid, {}).get("jurisdiction", "??").upper()
 
+
+def spofs_for(raw_graph: dict) -> tuple[str, set[str]]:
+    """run the real canonicalize + spof enumeration on a raw graph dict.
+
+    returns (party_id, canonical single-source ids).
+    """
+    canonical = canonicalize_graph(raw_graph, aliases)
+    return canonical["party_id"], enumerate_tier_spofs(canonical)
+
+
+# ----- committed-artifact view (unchanged behaviour, now via the real engine) -----
+
+party_a, a_ids = spofs_for(graph_a_raw)
+party_b, b_ids = spofs_for(graph_b_raw)
+shared = sorted(a_ids & b_ids)
+a_only = sorted(a_ids - b_ids)
+b_only = sorted(b_ids - a_ids)
 
 col1, col2, col3 = st.columns(3)
 col1.metric(f"{party_a} single-source ids", len(a_ids))
@@ -195,3 +153,137 @@ if SESSION.exists():
             "plaintext test oracle; dh_based is a reference mode, not audited "
             "production crypto."
         )
+
+
+# ----------------------- interactive: run the real psi yourself ----------------------
+
+st.divider()
+st.header("run the psi yourself")
+st.caption(
+    "edit one party's supplier graph below and re-run the REAL pipeline live: "
+    "canonicalize_graph -> enumerate_tier_spofs -> run_dh_based. the other party "
+    "stays fixed to its committed graph. only the intersection size + the shared "
+    "ids you also hold are revealed; the counterparty's private single-source "
+    "list never appears in the transcript."
+)
+
+st.markdown(
+    "a supplier is a **single source** when it is the only canonical supplier at "
+    "its tier (2 or 3) for some component. add a second tier-2/3 supplier to a "
+    "component to remove an exposure; remove peers to create one. edit the json, "
+    "then press **run psi**."
+)
+
+counterparty = st.radio(
+    "hold this party fixed (committed graph); you edit the other",
+    options=[party_b, party_a],
+    horizontal=True,
+    help="you edit the non-fixed party's graph below.",
+)
+if counterparty == party_b:
+    editable_label, editable_raw = party_a, graph_a_raw
+    fixed_label, fixed_raw = party_b, graph_b_raw
+else:
+    editable_label, editable_raw = party_b, graph_b_raw
+    fixed_label, fixed_raw = party_a, graph_a_raw
+
+st.caption(f"editing **{editable_label}** graph; **{fixed_label}** held to its committed graph.")
+
+if "graph_text" not in st.session_state or st.session_state.get("graph_party") != editable_label:
+    st.session_state["graph_text"] = json.dumps(editable_raw, indent=2)
+    st.session_state["graph_party"] = editable_label
+
+graph_text = st.text_area(
+    f"{editable_label} supplier graph (json)",
+    key="graph_text",
+    height=320,
+)
+
+seed = st.text_input(
+    "psi seed (deterministic dh_based session)",
+    value="streamlit-live",
+    help="same seed + same inputs -> reproducible blinding scalars and session.",
+)
+
+run = st.button("run psi", type="primary")
+
+if run:
+    # 1. parse the user's json
+    try:
+        user_graph = json.loads(graph_text)
+    except json.JSONDecodeError as exc:
+        st.error(f"invalid json: {exc}")
+        st.stop()
+
+    # 2. drive the REAL validator
+    try:
+        validate_supplier_graph(user_graph)
+    except GraphValidationError as exc:
+        st.error(f"graph rejected by validate_supplier_graph: {exc}")
+        st.stop()
+
+    # 3. drive the REAL canonicalize + spof enumeration on the edited party
+    try:
+        edited_party, edited_ids = spofs_for(user_graph)
+    except (GraphValidationError, KeyError) as exc:
+        st.error(f"engine error on edited graph: {exc}")
+        st.stop()
+
+    # fixed counterparty via the same real path
+    fixed_party, fixed_ids = spofs_for(fixed_raw)
+
+    # 4. drive the REAL dh_based psi protocol
+    if counterparty == party_b:
+        result = run_dh_based(
+            edited_ids, fixed_ids, party_a=edited_party, party_b=fixed_party, seed=seed
+        )
+    else:
+        result = run_dh_based(
+            fixed_ids, edited_ids, party_a=fixed_party, party_b=edited_party, seed=seed
+        )
+
+    # the protocol's own leakage check — proves the transcript reveals only size
+    leakage_ok = True
+    leakage_msg = ""
+    try:
+        assert_leakage_boundary(result)
+    except AssertionError as exc:  # pragma: no cover - defensive
+        leakage_ok = False
+        leakage_msg = str(exc)
+
+    intersection = list(result.intersection_canonical_ids)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric(f"{edited_party} single-source", len(edited_ids))
+    m2.metric(f"{fixed_party} single-source", len(fixed_ids))
+    m3.metric("shared (intersection)", result.intersection_size)
+
+    if intersection:
+        st.error(
+            f"{result.intersection_size} shared single-source exposure(s): "
+            + ", ".join(f"{name_of(c)} ({juris_of(c)})" for c in intersection)
+        )
+    else:
+        st.success("no shared single-source supplier — no joint exposure on this run.")
+
+    st.markdown(f"**{edited_party} single-source ids you control**")
+    st.dataframe(
+        [{"juris": juris_of(c), "supplier": name_of(c), "canonical_id": c} for c in sorted(edited_ids)]
+        or [{"juris": "", "supplier": "(none)", "canonical_id": ""}],
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    if leakage_ok:
+        st.caption(
+            "leakage check passed (assert_leakage_boundary): the dh_based transcript "
+            "below carries no canonical supplier ids — only the intersection size is "
+            f"revealed. {fixed_party}'s private single-source list never appears."
+        )
+    else:
+        st.warning(f"leakage boundary failed: {leakage_msg}")
+
+    with st.expander("session record (the only audit artifact the protocol emits)"):
+        st.json(result.session)
+    with st.expander("dh_based transcript (opaque payloads + size reveal)"):
+        st.json(result.transcript)
