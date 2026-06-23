@@ -121,3 +121,25 @@ def test_python_module_validate_no_args() -> None:
         capture_output=True,
     )
     assert "intersection_size=1" in completed.stdout
+
+
+def test_python_module_show_no_args() -> None:
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT / "src")
+    completed = subprocess.run(
+        [sys.executable, "-m", "mtpsi", "show"],
+        cwd=ROOT,
+        env=env,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    out = completed.stdout
+    # the no-arg show verb is read-only, exits 0, and names the shared exposure.
+    assert "shared single-source supplier exposure" in out
+    assert "phoenix substrates taiwan" in out
+    assert "sup.tw.phoenix-substrates" in out
+    assert "shared=1" in out
+    # ranked: the shared row appears before either party-only row.
+    assert out.index("shared") < out.index("oem_a only")
+    assert "intersection_size=1" in out

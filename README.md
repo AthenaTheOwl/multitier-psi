@@ -25,9 +25,36 @@ the committed fixtures return intersection size 1 in both modes.
 
 ```bash
 python -m mtpsi validate
+python -m mtpsi show
 python -m mtpsi run --mode baseline --seed fixture-v0
 python -m mtpsi run --mode dh_based --seed fixture-v0
 ```
+
+`show` reads the committed fixtures and prints the ranked shared single-source
+exposure (a table plus a one-line finding). it is read-only and offline.
+
+## live demo
+
+a streamlit page renders the same shared single-source exposure from the same
+committed data: pick a slice (shared / per-party), see the ranked supplier
+table, and read the headline finding.
+
+run it locally:
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+deploy on streamlit cloud with these settings:
+
+```text
+repo: AthenaTheOwl/multitier-psi
+branch: main
+main file: streamlit_app.py
+```
+
+<!-- live-url: (paste the streamlit cloud url here once deployed) -->
 
 local gates:
 
