@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from . import __version__
 from .party import (
+    GraphValidationError,
     Party,
     load_canonical_dictionary,
     load_json,
@@ -233,4 +235,12 @@ def main(argv: list[str] | None = None) -> int:
     if not hasattr(args, "func"):
         parser.print_help()
         return 0
-    return int(args.func(args))
+    try:
+        return int(args.func(args))
+    except (GraphValidationError, ValueError, OSError) as exc:
+        # bad --graph/--dictionary input (missing file, unreadable path, malformed
+        # json, or a graph that fails schema/validation) is a user error, not a
+        # crash: report one actionable line and exit non-zero instead of a traceback.
+        # GraphValidationError and json.JSONDecodeError both subclass ValueError.
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
