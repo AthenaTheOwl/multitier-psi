@@ -25,6 +25,16 @@ SKIP_PARTS = {
     ".git",
     ".pytest_cache",
     "__pycache__",
+    # Third-party trees. Without these the lint scans installed package
+    # metadata (licences, READMEs) and fails on prose nobody in this repo
+    # wrote, which trains the reader to ignore a red gate.
+    ".venv",
+    "venv",
+    "node_modules",
+    "site-packages",
+    ".tox",
+    ".mypy_cache",
+    ".ruff_cache",
     "AGENTS.md",
     "docs/first-pr.md",
     "specs/0001-foundation",
