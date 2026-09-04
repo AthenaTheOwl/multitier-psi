@@ -36,6 +36,12 @@ SKIP_PARTS = {
     ".mypy_cache",
     ".ruff_cache",
     "AGENTS.md",
+    # README was rewritten in the author's own register (e35f768, "sober
+    # register") with normal sentence case. The lowercase-voice rule is
+    # for generated status prose; it exempted AGENTS.md and the first-pr
+    # doc for the same reason and never got README added when it was
+    # rewritten, so this gate has been red at every commit since.
+    "README.md",
     "docs/first-pr.md",
     "specs/0001-foundation",
 }
