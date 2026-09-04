@@ -44,3 +44,5 @@ jobs:
 
       - name: validate-schemas
         run: python -m uv run python scripts/validate_schemas.py
+      - name: validate_data_conformance
+        run: python -m uv run python scripts/validate_data_conformance.py
