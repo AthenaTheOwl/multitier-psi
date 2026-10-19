@@ -153,3 +153,7 @@ library before any live use.
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+## Method update
+
+[October method update: The supplier dictionary belongs in the threat model](docs/canonicalization-threat-model.md).
