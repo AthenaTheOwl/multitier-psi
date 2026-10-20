@@ -149,11 +149,8 @@ library before any live use.
 - `decisions/DEC-PSI-001-protocol-choice.md`
 - `docs/security-disclosure.md`
 - `docs/dev/protocol-walkthrough.md`
+- `docs/canonicalization-threat-model.md`
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
-
-## Method update
-
-[October method update: The supplier dictionary belongs in the threat model](docs/canonicalization-threat-model.md).
