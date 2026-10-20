@@ -138,8 +138,10 @@ tests/
 Baseline sends plaintext sets. Use it as a test oracle only.
 
 dh_based is a reference mode: a commutative blinding flow with a padded mock
-secure-channel transcript for the fixtures. Replace it with an audited two-party PSI
-library before any live use.
+secure-channel transcript for the fixtures. It blinds in the prime-order subgroup of
+a 2048-bit safe-prime group. An earlier version used p = 2^255 - 19, where p - 1 has
+small factors and every blinded value leaked a quadratic-residue bit (see
+DEC-PSI-001). Replace it with an audited two-party PSI library before any live use.
 
 ## Docs
 
