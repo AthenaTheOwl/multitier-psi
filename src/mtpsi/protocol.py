@@ -186,6 +186,31 @@ def _token(value: int) -> str:
     return hashlib.sha256(str(value).encode("ascii")).hexdigest()
 
 
+def _fixture_rng(seed: str, stream: str) -> random.Random:
+    """One seeded stream per role, for the deterministic fixture mode only.
+
+    The seed is public (it is in the README run command), so anything drawn
+    here is public too. Each party and the transcript padding get their own
+    stream, so no party's secret is a later draw of another party's stream.
+    """
+
+    material = hashlib.sha256(f"mtpsi-fixture|{stream}|{seed}".encode("utf-8")).digest()
+    return random.Random(int.from_bytes(material, "big"))
+
+
+def _party_secret(seed: str | None, role: str) -> int:
+    """Draw one party's blinding secret.
+
+    Real mode (no seed) asks the OS CSPRNG through ``secrets`` once per party,
+    so the two secrets are independent. A seed selects the fixture mode, where
+    each role reads its own derived stream.
+    """
+
+    if seed is None:
+        return 2 + secrets.randbelow(DH_PRIME - 4)
+    return _fixture_rng(seed, f"party-{role}").randrange(2, DH_PRIME - 2)
+
+
 def _pad_tokens(tokens: list[str], *, pad_to: int, rng: random.Random) -> list[str]:
     padded = list(tokens)
     while len(padded) < pad_to:
@@ -205,9 +230,10 @@ def run_dh_based(
 ) -> ProtocolResult:
     a_sorted = sorted(set(a_ids))
     b_sorted = sorted(set(b_ids))
-    rng = random.Random(seed) if seed is not None else random.Random(secrets.randbits(128))
-    a_secret = rng.randrange(2, DH_PRIME - 2)
-    b_secret = rng.randrange(2, DH_PRIME - 2)
+    # each party holds its own secret; neither is derived from the other's stream
+    a_secret = _party_secret(seed, "a")
+    b_secret = _party_secret(seed, "b")
+    rng = random.SystemRandom() if seed is None else _fixture_rng(seed, "transcript-padding")
     padded_size = max(pad_to, len(a_sorted), len(b_sorted))
 
     a_once = {identifier: _blind(identifier, a_secret) for identifier in a_sorted}

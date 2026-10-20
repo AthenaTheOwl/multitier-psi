@@ -23,6 +23,11 @@ dh_based hashes each canonical id to a group value, applies one secret scalar
 per party, applies the peer scalar through the reference flow, and intersects
 the resulting blinded tokens.
 
+each party's secret is its own draw. without `--seed`, each comes from the OS
+CSPRNG (`secrets`). with `--seed`, the fixture mode derives one stream per role
+from the seed, which keeps runs reproducible. the seed is public, so seeded
+secrets are public too: use seeds for fixtures only.
+
 the transcript records opaque payload hashes, a fixed padding policy, and the
 intersection size. it does not record canonical supplier ids.
 
