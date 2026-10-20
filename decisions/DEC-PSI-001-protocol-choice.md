@@ -28,6 +28,32 @@ baseline is outside the leakage boundary because it sends plaintext sets.
 before live use, replace this mode with an audited two-party psi library and
 run the same graph preparation and fixture parity tests against that library.
 
+## dictionary attacks (amended october 2026)
+
+the fixture dictionary has five public entries, so submitting all of them
+turns the intersection into a lookup of the other party's whole set. the
+leakage boundary now bounds each party's query set at 80% of the dictionary,
+with at least one entry left out. that blocks the single-session sweep only;
+see `docs/security-disclosure.md` for what it leaves open.
+
+## group (amended october 2026)
+
+the first reference flow blinded in `Z_p*` with p = 2^255 - 19. that is the
+curve25519 field prime, not a group chosen for this protocol: p - 1 is
+divisible by 4, 3 and 65147, so a blinded value h^a kept the quadratic-residue
+bit (and the order-3 and order-65147 characters) of the hashed id h. a peer
+holding the public five-entry dictionary could use those bits to narrow which
+ids a blinded value could be, and to learn bits of the secret, without
+breaking anything.
+
+the flow now works in the subgroup of prime order q inside the rfc 3526
+2048-bit modp group, where p = 2q + 1 is a safe prime. ids are hashed into
+that subgroup by squaring a wide hash. secrets are drawn uniformly from
+[1, q - 1], and each party draws its own (`secrets` in real mode; separate
+seeded streams only in fixture mode). a received element is rejected unless it
+is a non-identity quadratic residue. this removes the residue-bit leak. it
+does not make the mode audited; the replacement path above still applies.
+
 ## replacement path
 
 an oprf-based or he-based implementation can replace `run_dh_based` if it

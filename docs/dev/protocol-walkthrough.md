@@ -19,9 +19,15 @@ with seed `fixture-v0`, the session record is byte-stable.
 
 ## dh_based
 
-dh_based hashes each canonical id to a group value, applies one secret scalar
+dh_based hashes each canonical id into the subgroup of prime order q of the
+rfc 3526 2048-bit safe-prime group (p = 2q + 1), applies one secret scalar
 per party, applies the peer scalar through the reference flow, and intersects
 the resulting blinded tokens.
+
+each party's secret is its own draw. without `--seed`, each comes from the os
+csprng (`secrets`). with `--seed`, the fixture mode derives one stream per role
+from the seed, which keeps runs reproducible. the seed is public, so seeded
+secrets are public too: use seeds for fixtures only.
 
 the transcript records opaque payload hashes, a fixed padding policy, and the
 intersection size. it does not record canonical supplier ids.

@@ -14,9 +14,36 @@ from typing import Any, Iterable
 from .party import SUPPLIER_TYPES, validate_supplier_graph
 
 PROTOCOL_VERSION = "0.1"
-DH_PRIME = (2**255) - 19
-DH_GENERATOR_FALLBACK = 5
 DEFAULT_PADDED_TRANSCRIPT_SIZE = 8
+
+# Dictionary attack bound. PSI reveals which of a party's own ids the other
+# side also holds, so a party that submits the whole public dictionary learns
+# the other side's whole set: the intersection becomes a lookup. A party sees
+# the size of the other side's blinded set but not its contents, so the bound
+# is on size: a query set may hold at most this fraction of the agreed
+# dictionary, and must leave at least one entry out. With the 5-entry fixture
+# dictionary that is 4 ids. This stops the full sweep only; it does not stop
+# a party splitting the sweep across sessions. See docs/security-disclosure.md.
+MAX_QUERY_FRACTION = 0.8
+
+# RFC 3526 group 14: the 2048-bit MODP safe prime p = 2q + 1, q prime. The
+# quadratic residues mod p are the subgroup of prime order q. Identifiers are
+# hashed into that subgroup and secrets are drawn from [1, q - 1], so every
+# blinded value is a residue: it carries no Legendre-symbol bit (or any other
+# small-subgroup bit) about the identifier or the secret. The previous group,
+# Z_p* with p = 2^255 - 19, has p - 1 divisible by 4, 3 and 65147, so its
+# blinded values leaked the quadratic-residue bit of each hashed id.
+GROUP_NAME = "rfc3526-modp-2048/prime-order-subgroup"
+GROUP_P = int(
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A0879"
+    "8E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B"
+    "0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA4836"
+    "1C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804"
+    "F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6"
+    "955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF",
+    16,
+)
+GROUP_Q = (GROUP_P - 1) // 2
 
 
 def repo_root() -> Path:
@@ -98,6 +125,8 @@ class ProtocolResult:
     session: dict[str, Any]
     transcript: list[dict[str, Any]]
     intersection_canonical_ids: tuple[str, ...]
+    # each party's query-set size, which the other party sees in a real run
+    input_sizes: tuple[int, int] = (0, 0)
 
     @property
     def intersection_size(self) -> int:
@@ -165,25 +194,94 @@ def run_baseline(
         intersection_size=len(intersection),
         transcript=transcript,
     )
-    return ProtocolResult("baseline", session, transcript, intersection)
+    return ProtocolResult("baseline", session, transcript, intersection, (len(a_sorted), len(b_sorted)))
 
 
-def _id_to_group_value(identifier: str) -> int:
-    digest = hashlib.sha256(identifier.encode("utf-8")).digest()
-    value = int.from_bytes(digest, "big") % DH_PRIME
-    return value or DH_GENERATOR_FALLBACK
+def _jacobi(a: int, n: int) -> int:
+    """Jacobi symbol (a/n) for odd n > 0; the Legendre symbol when n is prime."""
+
+    a %= n
+    result = 1
+    while a:
+        while a % 2 == 0:
+            a //= 2
+            if n % 8 in (3, 5):
+                result = -result
+        a, n = n, a
+        if a % 4 == 3 and n % 4 == 3:
+            result = -result
+        a %= n
+    return result if n == 1 else 0
+
+
+def in_prime_order_subgroup(value: int) -> bool:
+    """True when value is a non-identity element of the order-q subgroup.
+
+    For a safe prime that subgroup is exactly the quadratic residues, so the
+    Legendre symbol decides membership without a full-size exponentiation.
+    """
+
+    return 1 < value < GROUP_P and _jacobi(value, GROUP_P) == 1
+
+
+def hash_to_group(identifier: str) -> int:
+    """Hash an identifier to a non-identity element of the order-q subgroup.
+
+    SHA-512 is expanded to 2176 bits so the reduction mod p is close to
+    uniform, then squared, which lands in the quadratic residues.
+    """
+
+    counter = 0
+    while True:
+        blocks = (
+            hashlib.sha512(f"mtpsi-h2g|{counter}|{block}|{identifier}".encode("utf-8")).digest()
+            for block in range(5)
+        )
+        element = pow(int.from_bytes(b"".join(blocks)[:272], "big") % GROUP_P, 2, GROUP_P)
+        if element > 1:
+            return element
+        counter += 1
 
 
 def _blind(identifier: str, scalar: int) -> int:
-    return pow(_id_to_group_value(identifier), scalar, DH_PRIME)
+    return pow(hash_to_group(identifier), scalar, GROUP_P)
 
 
 def _blind_value(value: int, scalar: int) -> int:
-    return pow(value, scalar, DH_PRIME)
+    # a received element outside the subgroup could carry a small-order
+    # component that the reply would echo back; refuse it
+    if not in_prime_order_subgroup(value):
+        raise ValueError("received element is not in the prime-order subgroup")
+    return pow(value, scalar, GROUP_P)
 
 
 def _token(value: int) -> str:
     return hashlib.sha256(str(value).encode("ascii")).hexdigest()
+
+
+def _fixture_rng(seed: str, stream: str) -> random.Random:
+    """One seeded stream per role, for the deterministic fixture mode only.
+
+    The seed is public (it is in the README run command), so anything drawn
+    here is public too. Each party and the transcript padding get their own
+    stream, so no party's secret is a later draw of another party's stream.
+    """
+
+    material = hashlib.sha256(f"mtpsi-fixture|{stream}|{seed}".encode("utf-8")).digest()
+    return random.Random(int.from_bytes(material, "big"))
+
+
+def _party_secret(seed: str | None, role: str) -> int:
+    """Draw one party's blinding secret.
+
+    Real mode (no seed) asks the OS CSPRNG through ``secrets`` once per party,
+    so the two secrets are independent. A seed selects the fixture mode, where
+    each role reads its own derived stream.
+    """
+
+    if seed is None:
+        return 1 + secrets.randbelow(GROUP_Q - 1)
+    return _fixture_rng(seed, f"party-{role}").randrange(1, GROUP_Q)
 
 
 def _pad_tokens(tokens: list[str], *, pad_to: int, rng: random.Random) -> list[str]:
@@ -205,9 +303,10 @@ def run_dh_based(
 ) -> ProtocolResult:
     a_sorted = sorted(set(a_ids))
     b_sorted = sorted(set(b_ids))
-    rng = random.Random(seed) if seed is not None else random.Random(secrets.randbits(128))
-    a_secret = rng.randrange(2, DH_PRIME - 2)
-    b_secret = rng.randrange(2, DH_PRIME - 2)
+    # each party holds its own secret; neither is derived from the other's stream
+    a_secret = _party_secret(seed, "a")
+    b_secret = _party_secret(seed, "b")
+    rng = random.SystemRandom() if seed is None else _fixture_rng(seed, "transcript-padding")
     padded_size = max(pad_to, len(a_sorted), len(b_sorted))
 
     a_once = {identifier: _blind(identifier, a_secret) for identifier in a_sorted}
@@ -235,6 +334,7 @@ def run_dh_based(
         {
             "phase": "secure_channel_open",
             "payload": "opaque",
+            "group": GROUP_NAME,
             "padding_policy": f"fixed_min_{pad_to}",
         },
         {
@@ -262,10 +362,34 @@ def run_dh_based(
         intersection_size=len(intersection),
         transcript=transcript,
     )
-    return ProtocolResult("dh_based", session, transcript, intersection)
+    return ProtocolResult("dh_based", session, transcript, intersection, (len(a_sorted), len(b_sorted)))
 
 
-def assert_leakage_boundary(result: ProtocolResult) -> None:
+def load_dictionary_ids(path: str | Path | None = None) -> list[str]:
+    """Canonical ids in a supplier dictionary (default: the committed one)."""
+
+    dictionary_path = Path(path) if path else repo_root() / "data" / "canonical_supplier_dict.json"
+    data = json.loads(dictionary_path.read_text(encoding="utf-8"))
+    return [entry["canonical_id"] for entry in data.get("entries", []) if isinstance(entry, dict)]
+
+
+def max_query_set_size(dictionary_size: int, fraction: float = MAX_QUERY_FRACTION) -> int:
+    """Largest query set a party may submit against a dictionary of this size."""
+
+    return max(0, min(dictionary_size - 1, int(dictionary_size * fraction)))
+
+
+def assert_leakage_boundary(
+    result: ProtocolResult,
+    *,
+    dictionary_size: int | None = None,
+    max_query_fraction: float = MAX_QUERY_FRACTION,
+) -> None:
+    """Check the dh_based run reveals only the intersection, and only to an honest-sized query.
+
+    ``dictionary_size`` defaults to the committed canonical dictionary.
+    """
+
     if result.mode != "dh_based":
         raise AssertionError("leakage boundary applies to dh_based mode only")
     encoded = canonical_json(result.transcript)
@@ -277,6 +401,15 @@ def assert_leakage_boundary(result: ProtocolResult) -> None:
     ]
     if allowed_reveals != [{"phase": "result", "intersection_size": result.intersection_size}]:
         raise AssertionError("dh_based transcript reveals more than intersection size")
+    size = len(load_dictionary_ids()) if dictionary_size is None else dictionary_size
+    limit = max_query_set_size(size, max_query_fraction)
+    for party, submitted in zip(result.session["parties"], result.input_sizes):
+        if submitted > limit:
+            raise AssertionError(
+                f"dictionary attack: {party['party_id']} submitted {submitted} ids against a "
+                f"{size}-entry dictionary (limit {limit}); a query set that covers the "
+                "dictionary returns the other party's whole set"
+            )
 
 
 def validate_session_record(session: dict[str, Any]) -> None:
