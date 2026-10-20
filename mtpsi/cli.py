@@ -15,6 +15,7 @@ from .party import (
 )
 from .protocol import (
     assert_leakage_boundary,
+    load_dictionary_ids,
     run_baseline,
     run_dh_based,
     run_fixture_session,
@@ -147,6 +148,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         result = run_baseline(a_ids, b_ids, party_a=party_a.party_id, party_b=party_b.party_id, seed=args.seed)
     else:
         result = run_dh_based(a_ids, b_ids, party_a=party_a.party_id, party_b=party_b.party_id, seed=args.seed)
+        try:
+            assert_leakage_boundary(result, dictionary_size=len(load_dictionary_ids(args.dictionary)))
+        except AssertionError as exc:
+            raise ValueError(f"refusing to release the dh_based result: {exc}") from exc
     print(json.dumps(result.session, sort_keys=True))
     return 0
 

@@ -16,6 +16,16 @@ from .party import SUPPLIER_TYPES, validate_supplier_graph
 PROTOCOL_VERSION = "0.1"
 DEFAULT_PADDED_TRANSCRIPT_SIZE = 8
 
+# Dictionary attack bound. PSI reveals which of a party's own ids the other
+# side also holds, so a party that submits the whole public dictionary learns
+# the other side's whole set: the intersection becomes a lookup. A party sees
+# the size of the other side's blinded set but not its contents, so the bound
+# is on size: a query set may hold at most this fraction of the agreed
+# dictionary, and must leave at least one entry out. With the 5-entry fixture
+# dictionary that is 4 ids. This stops the full sweep only; it does not stop
+# a party splitting the sweep across sessions. See docs/security-disclosure.md.
+MAX_QUERY_FRACTION = 0.8
+
 # RFC 3526 group 14: the 2048-bit MODP safe prime p = 2q + 1, q prime. The
 # quadratic residues mod p are the subgroup of prime order q. Identifiers are
 # hashed into that subgroup and secrets are drawn from [1, q - 1], so every
@@ -115,6 +125,8 @@ class ProtocolResult:
     session: dict[str, Any]
     transcript: list[dict[str, Any]]
     intersection_canonical_ids: tuple[str, ...]
+    # each party's query-set size, which the other party sees in a real run
+    input_sizes: tuple[int, int] = (0, 0)
 
     @property
     def intersection_size(self) -> int:
@@ -182,7 +194,7 @@ def run_baseline(
         intersection_size=len(intersection),
         transcript=transcript,
     )
-    return ProtocolResult("baseline", session, transcript, intersection)
+    return ProtocolResult("baseline", session, transcript, intersection, (len(a_sorted), len(b_sorted)))
 
 
 def _jacobi(a: int, n: int) -> int:
@@ -350,10 +362,34 @@ def run_dh_based(
         intersection_size=len(intersection),
         transcript=transcript,
     )
-    return ProtocolResult("dh_based", session, transcript, intersection)
+    return ProtocolResult("dh_based", session, transcript, intersection, (len(a_sorted), len(b_sorted)))
 
 
-def assert_leakage_boundary(result: ProtocolResult) -> None:
+def load_dictionary_ids(path: str | Path | None = None) -> list[str]:
+    """Canonical ids in a supplier dictionary (default: the committed one)."""
+
+    dictionary_path = Path(path) if path else repo_root() / "data" / "canonical_supplier_dict.json"
+    data = json.loads(dictionary_path.read_text(encoding="utf-8"))
+    return [entry["canonical_id"] for entry in data.get("entries", []) if isinstance(entry, dict)]
+
+
+def max_query_set_size(dictionary_size: int, fraction: float = MAX_QUERY_FRACTION) -> int:
+    """Largest query set a party may submit against a dictionary of this size."""
+
+    return max(0, min(dictionary_size - 1, int(dictionary_size * fraction)))
+
+
+def assert_leakage_boundary(
+    result: ProtocolResult,
+    *,
+    dictionary_size: int | None = None,
+    max_query_fraction: float = MAX_QUERY_FRACTION,
+) -> None:
+    """Check the dh_based run reveals only the intersection, and only to an honest-sized query.
+
+    ``dictionary_size`` defaults to the committed canonical dictionary.
+    """
+
     if result.mode != "dh_based":
         raise AssertionError("leakage boundary applies to dh_based mode only")
     encoded = canonical_json(result.transcript)
@@ -365,6 +401,15 @@ def assert_leakage_boundary(result: ProtocolResult) -> None:
     ]
     if allowed_reveals != [{"phase": "result", "intersection_size": result.intersection_size}]:
         raise AssertionError("dh_based transcript reveals more than intersection size")
+    size = len(load_dictionary_ids()) if dictionary_size is None else dictionary_size
+    limit = max_query_set_size(size, max_query_fraction)
+    for party, submitted in zip(result.session["parties"], result.input_sizes):
+        if submitted > limit:
+            raise AssertionError(
+                f"dictionary attack: {party['party_id']} submitted {submitted} ids against a "
+                f"{size}-entry dictionary (limit {limit}); a query set that covers the "
+                "dictionary returns the other party's whole set"
+            )
 
 
 def validate_session_record(session: dict[str, Any]) -> None:

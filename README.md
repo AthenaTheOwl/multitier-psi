@@ -18,7 +18,11 @@ build each party's single-source set, and intersects the two sets. The dh_based 
 returns only the overlap — the one shared single-source supplier — while each side's
 own list stays private. On the committed fixtures, oem_a carries four single-source
 suppliers and oem_b carries two; the intersection reveals one and hides the other
-five.
+five, but only from a party that submits its honest set. The canonical dictionary is
+public and holds just those five suppliers, so a party that submits all five gets the
+other side's whole list back. That is a dictionary attack, which PSI cannot prevent
+on its own. The leakage check rejects any query set larger than 80% of the
+dictionary; see `docs/security-disclosure.md` for what that bound leaves open.
 
 It is a reference protocol package and a local testbed, not audited production
 crypto. The baseline mode sends plaintext sets and exists only as a test oracle.

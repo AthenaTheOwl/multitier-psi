@@ -28,6 +28,14 @@ baseline is outside the leakage boundary because it sends plaintext sets.
 before live use, replace this mode with an audited two-party psi library and
 run the same graph preparation and fixture parity tests against that library.
 
+## dictionary attacks (amended october 2026)
+
+the fixture dictionary has five public entries, so submitting all of them
+turns the intersection into a lookup of the other party's whole set. the
+leakage boundary now bounds each party's query set at 80% of the dictionary,
+with at least one entry left out. that blocks the single-session sweep only;
+see `docs/security-disclosure.md` for what it leaves open.
+
 ## group (amended october 2026)
 
 the first reference flow blinded in `Z_p*` with p = 2^255 - 19. that is the
